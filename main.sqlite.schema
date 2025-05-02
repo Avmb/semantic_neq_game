@@ -1,0 +1,174 @@
+CREATE TABLE dataset (
+name text not null,
+split text,
+primary key (name, split)
+);
+CREATE TABLE example (
+task_id integer not null,
+text text not null,
+code text not null,
+test_list_str text not null,
+test_setup_code text not null,
+challenge_test_list_str text not null,
+function_name text not null,
+dataset_id integer not null,
+primary key (task_id, text, code, test_list_str, test_setup_code, challenge_test_list_str, function_name, dataset_id)
+foreign key (dataset_id) references dataset (oid)
+);
+CREATE TABLE system_message
+(
+message text not null primary key
+);
+CREATE TABLE alice_config (
+mode text not null,
+model text not null,
+model_provider text,
+temperature real not null,
+top_p real not null,
+max_tokens integer not null,
+n integer not null,
+round_n integer not null,
+run_n integer not null,
+previous_round_id integer,
+finetuning_from_bob_filename text,
+finetuning_from_bob_config_id integer,
+primary key (round_n, run_n),
+foreign key (finetuning_from_bob_config_id) references bob_config (oid)
+);
+CREATE TABLE bob_config (
+mode text not null,
+model text not null,
+model_provider text,
+temperature real not null,
+top_p real not null,
+max_tokens integer not null,
+n integer not null,
+round_n integer not null,
+run_n integer not null,
+previous_round_id integer,
+finetuning_filename text,
+alice_config_id integer,
+primary key (round_n, run_n, alice_config_id),
+foreign key (alice_config_id) references alice_config (oid)
+);
+CREATE TABLE generated_program (
+example_id integer not null,
+program text not null,
+added_on_alice_round integer not null,
+added_on_alice_run integer not null,
+primary key (example_id, program),
+FOREIGN KEY (example_id) REFERENCES example (oid)
+);
+CREATE TABLE alice_llm_response (
+    query_id integer not null,
+    id integer not null,
+    llm_response text not null,
+    program text,
+    diverging_input_example text,
+    is_parsable integer, 
+    is_correct integer,
+    correct_program_id integer,
+    foreign key (correct_program_id) references generated_programs (oid),
+    foreign key (query_id) references alice_query_to_llm (oid),
+    primary key (query_id, id)
+);
+CREATE TABLE alice_query_to_llm (
+example_id integer not null,
+alice_config_id integer not null,
+system_message_id integer not null,
+user_message text not null,
+target_difficulty_level integer, 
+correct_fraction real,
+PRIMARY KEY (example_id, alice_config_id),
+FOREIGN KEY (example_id) REFERENCES example (oid),
+FOREIGN KEY (alice_config_id) REFERENCES alice_config (oid),
+FOREIGN KEY (system_message_id) REFERENCES system_message (oid)
+);
+CREATE VIEW bob_correct_evaluation_weight as select q.generated_program_id, q.bob_config_id, sum(r.weight) as total_correct_weight FROM bob_query_to_llm q INNER JOIN bob_llm_response r ON r.query_id = q.oid WHERE r.is_correct = 1 GROUP BY q.generated_program_id, q.bob_config_id
+/* bob_correct_evaluation_weight(generated_program_id,bob_config_id,total_correct_weight) */
+/* bob_correct_evaluation_weight(generated_program_id,bob_config_id,total_correct_weight) */
+/* bob_correct_evaluation_weight(generated_program_id,bob_config_id,total_correct_weight) */;
+CREATE VIEW bob_evaluation_weight as select q.generated_program_id, q.bob_config_id, sum(r.weight) as total_weight FROM bob_query_to_llm q INNER JOIN bob_llm_response r ON r.query_id = q.oid GROUP BY q.generated_program_id, q.bob_config_id
+/* bob_evaluation_weight(generated_program_id,bob_config_id,total_weight) */
+/* bob_evaluation_weight(generated_program_id,bob_config_id,total_weight) */
+/* bob_evaluation_weight(generated_program_id,bob_config_id,total_weight) */;
+CREATE VIEW evaluated_program_weights AS
+WITH summary_stats AS (
+    SELECT 
+        q.generated_program_id,
+        q.bob_config_id,
+        SUM(correct_weight) AS sum_correct_weight,
+        SUM(total_weight) AS sum_total_weight
+    FROM bob_query_weights
+    INNER JOIN bob_query_to_llm q
+    ON q.oid = query_id
+    GROUP BY q.generated_program_id, q.bob_config_id
+)
+SELECT * FROM summary_stats
+/* evaluated_program_weights(generated_program_id,bob_config_id,sum_correct_weight,sum_total_weight) */
+/* evaluated_program_weights(generated_program_id,bob_config_id,sum_correct_weight,sum_total_weight) */
+/* evaluated_program_weights(generated_program_id,bob_config_id,sum_correct_weight,sum_total_weight) */;
+CREATE VIEW evaluated_program AS
+WITH summary_stats AS (
+    SELECT 
+        generated_program_id,
+        bob_config_id,
+        sum_correct_weight,
+        sum_total_weight,
+        COALESCE(sum_correct_weight * 1.0 / NULLIF(sum_total_weight, 0), 0) AS correct_fraction,
+        COALESCE(CAST(10.0 * (1.0 - (sum_correct_weight * 1.0 / NULLIF(sum_total_weight, 0))) AS INTEGER), 10) AS computed_difficulty
+    FROM evaluated_program_weights
+)
+SELECT * FROM summary_stats
+/* evaluated_program(generated_program_id,bob_config_id,sum_correct_weight,sum_total_weight,correct_fraction,computed_difficulty) */
+/* evaluated_program(generated_program_id,bob_config_id,sum_correct_weight,sum_total_weight,correct_fraction,computed_difficulty) */
+/* evaluated_program(generated_program_id,bob_config_id,sum_correct_weight,sum_total_weight,correct_fraction,computed_difficulty) */;
+CREATE TABLE bob_query_to_llm (
+  generated_program_id integer not null,
+  bob_config_id integer not null,
+  id integer not null,
+  system_message_id integer not null,
+  user_message text,
+  PRIMARY KEY (generated_program_id, bob_config_id, id),
+  FOREIGN KEY (generated_program_id) REFERENCES example (oid),
+  FOREIGN KEY (bob_config_id) REFERENCES bob_config (oid),
+  FOREIGN KEY (system_message_id) REFERENCES system_message (oid)
+);
+CREATE TABLE bob_llm_response (
+  query_id integer not null,
+  id integer not null,
+  llm_response text not null,
+  diverging_input_example text,
+  parsed_diverging_input_example text,
+  is_parsable integer, 
+  is_correct integer,
+  weight integer,
+  PRIMARY KEY (query_id, id),
+  FOREIGN KEY (query_id) REFERENCES bob_query_to_llm (oid)
+);
+CREATE VIEW bob_query_weights AS
+WITH response_weights AS (
+    SELECT 
+        query_id,
+        SUM(CASE WHEN is_correct = 1 THEN weight ELSE 0 END) * 1.0 AS correct_weight,
+        SUM(weight) * 1.0 AS total_weight
+    FROM bob_llm_response
+    GROUP BY query_id
+)
+SELECT * FROM response_weights
+/* bob_query_weights(query_id,correct_weight,total_weight) */
+/* bob_query_weights(query_id,correct_weight,total_weight) */
+/* bob_query_weights(query_id,correct_weight,total_weight) */;
+CREATE VIEW bob_last_run_per_round AS
+WITH last_run AS (
+    SELECT
+        c.oid as bob_config_id,
+        c.round_n,
+        max(c.run_n) as max_run_n
+    FROM bob_config AS c
+    GROUP BY c.round_n
+)
+SELECT * FROM last_run
+/* bob_last_run_per_round(bob_config_id,round_n,max_run_n) */
+/* bob_last_run_per_round(bob_config_id,round_n,max_run_n) */
+/* bob_last_run_per_round(bob_config_id,round_n,max_run_n) */;
