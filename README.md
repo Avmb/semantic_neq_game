@@ -1,4 +1,4 @@
-# Program inequivalence game with Large Language Models
+# Program Semantic Inequivalence Game with Large Language Models
 
 ### Antonio Valerio Miceli-Barone, Vaishak Belle, Ali Payani
 
