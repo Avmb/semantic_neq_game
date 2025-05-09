@@ -2,6 +2,8 @@
 
 ### Antonio Valerio Miceli-Barone, Vaishak Belle, Ali Payani
 
+https://arxiv.org/abs/2505.03818
+
 ## Abstract
 
 Large Language Models (LLMs) can achieve strong performance on everyday coding tasks, but they can fail on complex tasks that require non-trivial reasoning about program semantics.
@@ -15,5 +17,19 @@ We evaluated our approach on multiple code generation and understanding benchmar
 
 Data generated during self-play is contained in the sqlite database `main.sqlite` and in the compressed archive `jsonl_data.tar.bz2`. Finetuning data for the models is available in the `finetuning_data_for*` directories.
 Code is provided in the Jupyter notebooks.
+
+## Cite as
+
+```
+@misc{micelibarone2025programsemanticinequivalencegame,
+      title={Program Semantic Inequivalence Game with Large Language Models}, 
+      author={Antonio Valerio Miceli-Barone and Vaishak Belle and Ali Payani},
+      year={2025},
+      eprint={2505.03818},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2505.03818}, 
+}
+```
 
 
